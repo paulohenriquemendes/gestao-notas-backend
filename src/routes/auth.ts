@@ -7,13 +7,14 @@ import {
   resetPassword,
 } from "../controllers/authController";
 import { authMiddleware } from "../middlewares/auth";
+import { asyncHandler } from "../utils/asyncHandler";
 
 const authRouter = Router();
 
-authRouter.post("/register", register);
-authRouter.post("/login", login);
-authRouter.post("/forgot-password", forgotPassword);
-authRouter.post("/reset-password", resetPassword);
-authRouter.get("/profile", authMiddleware, profile);
+authRouter.post("/register", asyncHandler(register));
+authRouter.post("/login", asyncHandler(login));
+authRouter.post("/forgot-password", asyncHandler(forgotPassword));
+authRouter.post("/reset-password", asyncHandler(resetPassword));
+authRouter.get("/profile", authMiddleware, asyncHandler(profile));
 
 export { authRouter };

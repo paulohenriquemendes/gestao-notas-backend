@@ -60,6 +60,17 @@ const exportacaoSchema = filtrosSchema.extend({
 });
 
 /**
+ * Define o escopo de acesso às notas conforme o perfil autenticado.
+ */
+function obterEscopoNotas(userId: string, userRole?: string) {
+  if (userRole === "ADMIN") {
+    return {};
+  }
+
+  return { userId };
+}
+
+/**
  * Monta o resumo consolidado do dashboard.
  */
 function montarResumo(notas: ReturnType<typeof formatarNotaFiscal>[]): DashboardResumo {
@@ -314,18 +325,18 @@ function gerarPdfBuffer(
       }
 
       const topo = pdf.y;
-      const altura = 74;
+      const altura = 92;
       pdf.roundedRect(40, topo, larguraUtil, altura, 12).fill("#ffffff");
       pdf.roundedRect(40, topo, 14, altura, 12).fill(obterCorStatus(String(linha.Status)));
 
       pdf.fillColor("#0f172a").fontSize(11).text(`${index + 1}. Nota ${linha.Numero}`, 66, topo + 10);
       pdf.fontSize(10).fillColor("#1e293b").text(String(linha.Cliente), 66, topo + 26, { width: 240 });
-      pdf.fontSize(9).fillColor("#475569").text(`Destinatario: ${linha.Destinatario}`, 66, topo + 42, {
+      pdf.fontSize(9).fillColor("#475569").text(`Destinatario: ${linha.Destinatario}`, 66, topo + 48, {
         width: 250,
       });
       pdf.text(`Prazo: ${linha.Prazo} | Status: ${linha.Status}`, 320, topo + 10, { width: 220 });
-      pdf.text(`Dias restantes: ${linha.DiasRestantes}`, 320, topo + 26, { width: 220 });
-      pdf.text(`Observacoes: ${linha.Observacoes || "-"}`, 320, topo + 42, { width: 220, ellipsis: true });
+      pdf.text(`Dias restantes: ${linha.DiasRestantes}`, 320, topo + 34, { width: 220 });
+      pdf.text(`Observacoes: ${linha.Observacoes || "-"}`, 320, topo + 58, { width: 220, ellipsis: true });
 
       pdf.y = topo + altura + 10;
     });
@@ -337,10 +348,14 @@ function gerarPdfBuffer(
 /**
  * Busca e formata todas as notas necessárias para exportação com base nos filtros informados.
  */
-async function carregarNotasParaExportacao(userId: string, filtros: z.infer<typeof filtrosSchema>) {
+async function carregarNotasParaExportacao(
+  userId: string,
+  filtros: z.infer<typeof filtrosSchema>,
+  userRole?: string,
+) {
   const notas = await prisma.notaFiscal.findMany({
     where: {
-      userId,
+      ...obterEscopoNotas(userId, userRole),
       OR: filtros.busca
         ? [
             { numero: { contains: filtros.busca, mode: "insensitive" } },
@@ -370,6 +385,7 @@ async function carregarNotasParaExportacao(userId: string, filtros: z.infer<type
  */
 export async function obterSugestoes(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
+  const userRole = request.userRole;
 
   if (!userId) {
     response.status(401).json({ message: "Usuário não autenticado." });
@@ -379,14 +395,14 @@ export async function obterSugestoes(request: Request, response: Response): Prom
   const [clientes, destinatarios] = await Promise.all([
     prisma.notaFiscal.groupBy({
       by: ["cliente"],
-      where: { userId },
+      where: obterEscopoNotas(userId, userRole),
       _count: { cliente: true },
       orderBy: { _count: { cliente: "desc" } },
       take: 8,
     }),
     prisma.notaFiscal.groupBy({
       by: ["destinatario"],
-      where: { userId },
+      where: obterEscopoNotas(userId, userRole),
       _count: { destinatario: true },
       orderBy: { _count: { destinatario: "desc" } },
       take: 8,
@@ -404,6 +420,7 @@ export async function obterSugestoes(request: Request, response: Response): Prom
  */
 export async function listarAlertas(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
+  const userRole = request.userRole;
 
   if (!userId) {
     response.status(401).json({ message: "Usuário não autenticado." });
@@ -411,7 +428,7 @@ export async function listarAlertas(request: Request, response: Response): Promi
   }
 
   const notas = await prisma.notaFiscal.findMany({
-    where: { userId },
+    where: obterEscopoNotas(userId, userRole),
     include: {
       historicos: {
         include: {
@@ -441,7 +458,7 @@ export async function exportarNotas(request: Request, response: Response): Promi
   }
 
   const filtros = exportacaoSchema.parse(request.query);
-  const formatadas = await carregarNotasParaExportacao(userId, filtros);
+  const formatadas = await carregarNotasParaExportacao(userId, filtros, request.userRole);
   const linhas = montarLinhasExportacao(formatadas);
   const resumo = montarResumo(formatadas);
 
@@ -475,6 +492,7 @@ export async function exportarNotas(request: Request, response: Response): Promi
  */
 export async function listarNotas(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
+  const userRole = request.userRole;
 
   if (!userId) {
     response.status(401).json({ message: "Usuário não autenticado." });
@@ -486,7 +504,7 @@ export async function listarNotas(request: Request, response: Response): Promise
 
   const notas = await prisma.notaFiscal.findMany({
     where: {
-      userId,
+      ...obterEscopoNotas(userId, userRole),
       OR: filtros.busca
         ? [
             { numero: { contains: filtros.busca, mode: "insensitive" } },
@@ -541,6 +559,7 @@ export async function listarNotas(request: Request, response: Response): Promise
  */
 export async function obterNota(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
+  const userRole = request.userRole;
   const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
 
   if (!id) {
@@ -549,7 +568,7 @@ export async function obterNota(request: Request, response: Response): Promise<v
   }
 
   const nota = await prisma.notaFiscal.findFirst({
-    where: { id, userId },
+    where: { id, ...obterEscopoNotas(userId ?? "", userRole) },
     include: {
       historicos: {
         include: {
@@ -647,6 +666,7 @@ export async function criarNota(request: Request, response: Response): Promise<v
  */
 export async function atualizarNota(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
+  const userRole = request.userRole;
   const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
   const dados = notaSchema.parse(request.body);
 
@@ -661,7 +681,7 @@ export async function atualizarNota(request: Request, response: Response): Promi
   }
 
   const notaExistente = await prisma.notaFiscal.findFirst({
-    where: { id, userId },
+    where: { id, ...obterEscopoNotas(userId, userRole) },
   });
 
   if (!notaExistente) {
@@ -784,6 +804,7 @@ export async function atualizarNota(request: Request, response: Response): Promi
  */
 export async function excluirNota(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
+  const userRole = request.userRole;
   const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
 
   if (!userId) {
@@ -797,7 +818,7 @@ export async function excluirNota(request: Request, response: Response): Promise
   }
 
   const notaExistente = await prisma.notaFiscal.findFirst({
-    where: { id, userId },
+    where: { id, ...obterEscopoNotas(userId, userRole) },
   });
 
   if (!notaExistente) {

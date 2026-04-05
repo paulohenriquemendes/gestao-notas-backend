@@ -10,17 +10,18 @@ import {
   obterSugestoes,
 } from "../controllers/notaController";
 import { authMiddleware } from "../middlewares/auth";
+import { asyncHandler } from "../utils/asyncHandler";
 
 const notasRouter = Router();
 
 notasRouter.use(authMiddleware);
-notasRouter.get("/", listarNotas);
-notasRouter.get("/alertas", listarAlertas);
-notasRouter.get("/sugestoes", obterSugestoes);
-notasRouter.get("/exportar", exportarNotas);
-notasRouter.get("/:id", obterNota);
-notasRouter.post("/", criarNota);
-notasRouter.put("/:id", atualizarNota);
-notasRouter.delete("/:id", excluirNota);
+notasRouter.get("/", asyncHandler(listarNotas));
+notasRouter.get("/alertas", asyncHandler(listarAlertas));
+notasRouter.get("/sugestoes", asyncHandler(obterSugestoes));
+notasRouter.get("/exportar", asyncHandler(exportarNotas));
+notasRouter.get("/:id", asyncHandler(obterNota));
+notasRouter.post("/", asyncHandler(criarNota));
+notasRouter.put("/:id", asyncHandler(atualizarNota));
+notasRouter.delete("/:id", asyncHandler(excluirNota));
 
 export { notasRouter };

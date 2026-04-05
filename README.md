@@ -42,6 +42,7 @@ backend/
 - `nome`
 - `email`
 - `senhaHash`
+- `role`
 
 ### NotaFiscal
 
@@ -49,6 +50,7 @@ backend/
 - `numero`
 - `cliente`
 - `destinatario`
+- `observacoes`
 - `dataEmissao`
 - `dataChegada`
 - `dataLimite`
@@ -106,9 +108,14 @@ npm run dev
 
 O arquivo [prisma/seed.ts](/C:/Users/p-h-m/Downloads/DEV2026/gestão-notas/backend/prisma/seed.ts) cria:
 
-- usuário `admin@gestaonotas.com`
-- senha `123456`
+- dados de exemplo para facilitar testes locais
 - notas fiscais cobrindo todos os estados do dashboard
+
+Recomendações:
+
+- use o seed apenas em ambiente de desenvolvimento
+- altere quaisquer acessos de teste antes de publicar o sistema
+- não exponha credenciais em documentação, e-mails ou páginas públicas
 
 ## Endpoints
 
@@ -120,15 +127,9 @@ O arquivo [prisma/seed.ts](/C:/Users/p-h-m/Downloads/DEV2026/gestão-notas/backe
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
-
-Exemplo de login:
-
-```json
-{
-  "email": "admin@gestaonotas.com",
-  "senha": "123456"
-}
-```
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `GET /api/auth/profile`
 
 ### Notas fiscais
 
@@ -143,6 +144,9 @@ Authorization: Bearer SEU_TOKEN
 - `POST /api/notas`
 - `PUT /api/notas/:id`
 - `DELETE /api/notas/:id`
+- `GET /api/notas/alertas`
+- `GET /api/notas/sugestoes`
+- `GET /api/notas/exportar`
 
 Exemplo de payload:
 
@@ -151,11 +155,17 @@ Exemplo de payload:
   "numero": "NF-2026-001",
   "cliente": "Química Alfa",
   "destinatario": "Planta Norte",
+  "observacoes": "Entrega prioritária para conferência.",
   "dataEmissao": "2026-04-05",
   "dataChegada": "2026-04-06",
   "dataLimite": "2026-04-09"
 }
 ```
+
+## Regras de acesso
+
+- usuários com perfil `ADMIN` visualizam notas de todos os usuários
+- usuários com perfil `OPERADOR` visualizam apenas as próprias notas
 
 ## Deploy
 
@@ -172,9 +182,9 @@ Exemplo de payload:
 
 ### Observações de deploy
 
-- O `postinstall` gera automaticamente o client do Prisma.
-- O banco pode ser sincronizado com `prisma db push`.
-- O seed pode ser executado manualmente após preparar o banco.
+- o `postinstall` gera automaticamente o client do Prisma
+- o banco pode ser sincronizado com `prisma db push`
+- o seed pode ser executado manualmente após preparar o banco
 
 ## Arquivos importantes
 
