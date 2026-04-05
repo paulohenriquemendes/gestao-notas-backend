@@ -1,5 +1,5 @@
-import { NotaFiscal } from "@prisma/client";
-import { NotaFiscalResponse, NotaStatus } from "../types";
+import { NotaFiscal, NotaHistorico, User } from "@prisma/client";
+import { NotaFiscalResponse, NotaHistoricoResponse, NotaStatus } from "../types";
 
 const MS_POR_DIA = 1000 * 60 * 60 * 24;
 
@@ -47,12 +47,70 @@ export function calcularStatus(dataLimite: Date, hoje = new Date()): NotaStatus 
 }
 
 /**
+ * Traduz a distância do prazo em um indicador amigável para o dashboard.
+ */
+export function gerarIndicadorPrazo(diasRestantes: number): string {
+  if (diasRestantes < 0) {
+    const diasAtraso = Math.abs(diasRestantes);
+    return diasAtraso === 1 ? "Atrasada há 1 dia" : `Atrasada há ${diasAtraso} dias`;
+  }
+
+  if (diasRestantes === 0) {
+    return "Vence hoje";
+  }
+
+  if (diasRestantes === 1) {
+    return "Vence em 1 dia";
+  }
+
+  return `Vence em ${diasRestantes} dias`;
+}
+
+/**
+ * Converte o status em peso numérico para ordenação automática por urgência.
+ */
+export function obterPesoPrioridade(status: NotaStatus): number {
+  const pesos: Record<NotaStatus, number> = {
+    atrasada: 0,
+    venceHoje: 1,
+    venceAmanha: 2,
+    venceEm3Dias: 3,
+    dentroPrazo: 4,
+  };
+
+  return pesos[status];
+}
+
+/**
+ * Formata o histórico da nota para uso direto no frontend.
+ */
+export function formatarHistorico(
+  historico: NotaHistorico & { user: Pick<User, "id" | "nome"> },
+): NotaHistoricoResponse {
+  return {
+    id: historico.id,
+    numeroNota: historico.numeroNota,
+    acao: historico.acao,
+    descricao: historico.descricao,
+    alteracoes: (historico.alteracoes as Record<string, unknown> | null) ?? null,
+    userId: historico.userId,
+    userNome: historico.user.nome,
+    createdAt: historico.createdAt.toISOString(),
+  };
+}
+
+/**
  * Enriquece a nota fiscal com campos calculados usados no dashboard.
  */
-export function formatarNotaFiscal(nota: NotaFiscal): NotaFiscalResponse {
+export function formatarNotaFiscal(
+  nota: NotaFiscal & {
+    historicos?: (NotaHistorico & { user: Pick<User, "id" | "nome"> })[];
+  },
+): NotaFiscalResponse {
   const hoje = new Date();
   const diasDesdeChegada = diferencaEmDias(new Date(nota.dataChegada), hoje);
   const diasRestantes = diferencaEmDias(hoje, new Date(nota.dataLimite));
+  const status = calcularStatus(new Date(nota.dataLimite), hoje);
 
   return {
     id: nota.id,
@@ -65,6 +123,9 @@ export function formatarNotaFiscal(nota: NotaFiscal): NotaFiscalResponse {
     userId: nota.userId,
     diasDesdeChegada,
     diasRestantes,
-    status: calcularStatus(new Date(nota.dataLimite), hoje),
+    status,
+    indicadorPrazo: gerarIndicadorPrazo(diasRestantes),
+    prioridadePeso: obterPesoPrioridade(status),
+    historicoRecente: (nota.historicos ?? []).map(formatarHistorico),
   };
 }

@@ -1,11 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
-import { JwtPayload } from "../types";
+import { JwtPayload, UserRole } from "../types";
 
 declare global {
   namespace Express {
     interface Request {
       userId?: string;
+      userRole?: UserRole;
     }
   }
 }
@@ -37,6 +38,7 @@ export function authMiddleware(
 
     const payload = jwt.verify(token, secret) as JwtPayload;
     request.userId = payload.sub;
+    request.userRole = payload.role;
     next();
   } catch {
     response.status(401).json({ message: "Token inválido ou expirado." });

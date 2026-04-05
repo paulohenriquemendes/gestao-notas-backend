@@ -7,18 +7,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  ADMIN
+  OPERADOR
+}
+
+enum HistoricoAcao {
+  CRIADA
+  ATUALIZADA
+  EXCLUIDA
+  PRAZO_ALTERADO
+  DESTINATARIO_ALTERADO
+}
+
 model User {
-  id        String       @id @default(cuid())
-  nome      String
-  email     String       @unique
-  senhaHash String
-  notas     NotaFiscal[]
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id                  String               @id @default(cuid())
+  nome                String
+  email               String               @unique
+  senhaHash           String
+  role                UserRole             @default(OPERADOR)
+  notas               NotaFiscal[]
+  historicos          NotaHistorico[]
+  passwordResetTokens PasswordResetToken[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }
 
 model NotaFiscal {
-  id           String   @id @default(cuid())
+  id           String          @id @default(cuid())
   numero       String
   cliente      String
   destinatario String
@@ -26,7 +42,31 @@ model NotaFiscal {
   dataChegada  DateTime
   dataLimite   DateTime
   userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  historicos   NotaHistorico[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model NotaHistorico {
+  id           String         @id @default(cuid())
+  notaId        String?
+  numeroNota    String
+  acao          HistoricoAcao
+  descricao     String
+  alteracoes    Json?
+  userId        String
+  nota          NotaFiscal?    @relation(fields: [notaId], references: [id], onDelete: SetNull)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime       @default(now())
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId      String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
