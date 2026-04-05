@@ -82,7 +82,12 @@ export async function listarNotas(request: Request, response: Response): Promise
 export async function obterNota(request: Request, response: Response): Promise<void> {
   try {
     const userId = request.userId;
-    const { id } = request.params;
+    const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+
+    if (!id) {
+      response.status(400).json({ message: "Identificador da nota fiscal não informado." });
+      return;
+    }
 
     const nota = await prisma.notaFiscal.findFirst({
       where: { id, userId },
@@ -140,8 +145,13 @@ export async function criarNota(request: Request, response: Response): Promise<v
 export async function atualizarNota(request: Request, response: Response): Promise<void> {
   try {
     const userId = request.userId;
-    const { id } = request.params;
+    const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
     const dados = notaSchema.parse(request.body);
+
+    if (!id) {
+      response.status(400).json({ message: "Identificador da nota fiscal não informado." });
+      return;
+    }
 
     const notaExistente = await prisma.notaFiscal.findFirst({
       where: { id, userId },
@@ -179,7 +189,12 @@ export async function atualizarNota(request: Request, response: Response): Promi
 export async function excluirNota(request: Request, response: Response): Promise<void> {
   try {
     const userId = request.userId;
-    const { id } = request.params;
+    const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+
+    if (!id) {
+      response.status(400).json({ message: "Identificador da nota fiscal não informado." });
+      return;
+    }
 
     const notaExistente = await prisma.notaFiscal.findFirst({
       where: { id, userId },
