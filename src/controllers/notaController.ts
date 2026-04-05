@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
+import PDFDocument from "pdfkit";
+import XLSX from "xlsx";
 import { z } from "zod";
 import { prisma } from "../prisma/client";
 import {
@@ -16,6 +18,7 @@ const notaSchema = z
     numero: z.string().min(1, "Informe o número da nota fiscal."),
     cliente: z.string().min(2, "Informe o cliente."),
     destinatario: z.string().min(2, "Informe o destinatário final."),
+    observacoes: z.string().max(2000, "As observações devem ter no máximo 2000 caracteres.").optional(),
     dataEmissao: z.string().min(1, "Informe a data de emissão."),
     dataChegada: z.string().min(1, "Informe a data de chegada."),
     dataLimite: z.string().min(1, "Informe a data limite."),
@@ -50,6 +53,10 @@ const filtrosSchema = z.object({
   pageSize: z.coerce.number().min(1).max(50).default(10),
   sortBy: z.enum(["urgencia", "prazo", "cliente", "chegada"]).default("urgencia"),
   sortOrder: z.enum(["asc", "desc"]).default("asc"),
+});
+
+const exportacaoSchema = filtrosSchema.extend({
+  formato: z.enum(["pdf", "csv", "excel"]).default("pdf"),
 });
 
 /**
@@ -148,6 +155,217 @@ function ordenarNotas(
 }
 
 /**
+ * Aplica os mesmos filtros operacionais usados no dashboard para reaproveitar na exportação.
+ */
+function aplicarFiltrosNotas(
+  notas: ReturnType<typeof formatarNotaFiscal>[],
+  filtros: z.infer<typeof filtrosSchema>,
+) {
+  let formatadas = ordenarNotas(notas, filtros.sortBy, filtros.sortOrder);
+
+  if (filtros.periodo === "7" || filtros.periodo === "30") {
+    const hoje = normalizarData(new Date());
+    const limite = new Date(hoje);
+    limite.setDate(limite.getDate() + Number(filtros.periodo));
+    formatadas = formatadas.filter((nota) => normalizarData(new Date(nota.dataLimite)) <= limite);
+  }
+
+  if (filtros.status && filtros.status !== "todos") {
+    formatadas = formatadas.filter((nota) => nota.status === filtros.status);
+  }
+
+  return formatadas;
+}
+
+/**
+ * Converte as notas para uma estrutura tabular reutilizável entre CSV, Excel e PDF.
+ */
+function montarLinhasExportacao(notas: ReturnType<typeof formatarNotaFiscal>[]) {
+  return notas.map((nota) => ({
+    Numero: nota.numero,
+    Cliente: nota.cliente,
+    Destinatario: nota.destinatario,
+    Observacoes: nota.observacoes ?? "",
+    Emissao: nota.dataEmissao,
+    Chegada: nota.dataChegada,
+    Prazo: nota.dataLimite,
+    Status: nota.status,
+    DiasRestantes: nota.diasRestantes,
+  }));
+}
+
+/**
+ * Gera um CSV textual com escape de aspas para abrir corretamente em planilhas.
+ */
+function gerarCsv(linhas: Record<string, string | number>[]) {
+  if (linhas.length === 0) {
+    return "Numero,Cliente,Destinatario,Observacoes,Emissao,Chegada,Prazo,Status,DiasRestantes";
+  }
+
+  const cabecalho = Object.keys(linhas[0]).join(",");
+  const conteudo = linhas.map((linha) =>
+    Object.values(linha)
+      .map((campo) => `"${String(campo).replace(/"/g, '""')}"`)
+      .join(","),
+  );
+
+  return [cabecalho, ...conteudo].join("\n");
+}
+
+/**
+ * Gera um arquivo Excel simples a partir das linhas filtradas.
+ */
+function gerarExcelBuffer(linhas: Record<string, string | number>[]) {
+  const workbook = XLSX.utils.book_new();
+  const cabecalho = [
+    "Numero",
+    "Cliente",
+    "Destinatario",
+    "Observacoes",
+    "Emissao",
+    "Chegada",
+    "Prazo",
+    "Status",
+    "DiasRestantes",
+  ];
+  const dados = linhas.map((linha) => [
+    linha.Numero,
+    linha.Cliente,
+    linha.Destinatario,
+    linha.Observacoes,
+    linha.Emissao,
+    linha.Chegada,
+    linha.Prazo,
+    linha.Status,
+    linha.DiasRestantes,
+  ]);
+  const worksheet = XLSX.utils.aoa_to_sheet([cabecalho, ...dados]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Notas");
+  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+}
+
+/**
+ * Monta um PDF operacional com resumo e listagem principal das notas exportadas.
+ */
+function gerarPdfBuffer(
+  linhas: Record<string, string | number>[],
+  resumo: DashboardResumo,
+  filtros: z.infer<typeof exportacaoSchema>,
+) {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const pdf = new PDFDocument({ margin: 40, size: "A4" });
+
+    pdf.on("data", (chunk) => chunks.push(chunk as Buffer));
+    pdf.on("end", () => resolve(Buffer.concat(chunks)));
+    pdf.on("error", reject);
+
+    const larguraUtil = pdf.page.width - pdf.page.margins.left - pdf.page.margins.right;
+
+    /**
+     * Define a cor principal de acordo com o status operacional da nota.
+     */
+    function obterCorStatus(status: string) {
+      if (status === "atrasada") return "#fee2e2";
+      if (status === "venceHoje" || status === "venceAmanha") return "#ffedd5";
+      if (status === "venceEm3Dias") return "#fef3c7";
+      return "#dcfce7";
+    }
+
+    /**
+     * Desenha um pequeno card de resumo colorido no topo do PDF.
+     */
+    function desenharCardResumo(x: number, y: number, titulo: string, valor: number, cor: string) {
+      pdf.roundedRect(x, y, 120, 46, 10).fill(cor);
+      pdf.fillColor("#0f172a").fontSize(9).text(titulo, x + 10, y + 9, { width: 100 });
+      pdf.fontSize(16).text(String(valor), x + 10, y + 22, { width: 100 });
+    }
+
+    pdf.roundedRect(40, 36, larguraUtil, 74, 16).fill("#0f172a");
+    pdf.fillColor("#ffffff").fontSize(18).text("Relatorio de Notas Fiscais", 56, 54);
+    pdf
+      .fontSize(10)
+      .fillColor("#cbd5e1")
+      .text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 56, 78)
+      .text(
+        `Periodo: ${filtros.periodo ?? "todos"} | Status: ${filtros.status ?? "todos"} | Busca: ${filtros.busca ?? "-"}`,
+        56,
+        92,
+        { width: larguraUtil - 32 },
+      );
+
+    desenharCardResumo(40, 128, "Total", resumo.total, "#e2e8f0");
+    desenharCardResumo(172, 128, "Atrasadas", resumo.atrasadas, "#fecaca");
+    desenharCardResumo(304, 128, "Vencendo", resumo.vencendo, "#fed7aa");
+    desenharCardResumo(436, 128, "No prazo", resumo.noPrazo, "#bbf7d0");
+
+    pdf.y = 196;
+
+    if (linhas.length === 0) {
+      pdf.fillColor("#334155").fontSize(11).text("Nenhuma nota encontrada para os filtros selecionados.");
+      pdf.end();
+      return;
+    }
+
+    linhas.forEach((linha, index) => {
+      if (pdf.y > 730) {
+        pdf.addPage();
+        pdf.y = 40;
+      }
+
+      const topo = pdf.y;
+      const altura = 74;
+      pdf.roundedRect(40, topo, larguraUtil, altura, 12).fill("#ffffff");
+      pdf.roundedRect(40, topo, 14, altura, 12).fill(obterCorStatus(String(linha.Status)));
+
+      pdf.fillColor("#0f172a").fontSize(11).text(`${index + 1}. Nota ${linha.Numero}`, 66, topo + 10);
+      pdf.fontSize(10).fillColor("#1e293b").text(String(linha.Cliente), 66, topo + 26, { width: 240 });
+      pdf.fontSize(9).fillColor("#475569").text(`Destinatario: ${linha.Destinatario}`, 66, topo + 42, {
+        width: 250,
+      });
+      pdf.text(`Prazo: ${linha.Prazo} | Status: ${linha.Status}`, 320, topo + 10, { width: 220 });
+      pdf.text(`Dias restantes: ${linha.DiasRestantes}`, 320, topo + 26, { width: 220 });
+      pdf.text(`Observacoes: ${linha.Observacoes || "-"}`, 320, topo + 42, { width: 220, ellipsis: true });
+
+      pdf.y = topo + altura + 10;
+    });
+
+    pdf.end();
+  });
+}
+
+/**
+ * Busca e formata todas as notas necessárias para exportação com base nos filtros informados.
+ */
+async function carregarNotasParaExportacao(userId: string, filtros: z.infer<typeof filtrosSchema>) {
+  const notas = await prisma.notaFiscal.findMany({
+    where: {
+      userId,
+      OR: filtros.busca
+        ? [
+            { numero: { contains: filtros.busca, mode: "insensitive" } },
+            { cliente: { contains: filtros.busca, mode: "insensitive" } },
+            { destinatario: { contains: filtros.busca, mode: "insensitive" } },
+          ]
+        : undefined,
+    },
+    include: {
+      historicos: {
+        include: {
+          user: {
+            select: { id: true, nome: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 3,
+      },
+    },
+  });
+
+  return aplicarFiltrosNotas(notas.map(formatarNotaFiscal), filtros);
+}
+
+/**
  * Busca as sugestões mais usadas para acelerar o preenchimento do formulário.
  */
 export async function obterSugestoes(request: Request, response: Response): Promise<void> {
@@ -212,7 +430,7 @@ export async function listarAlertas(request: Request, response: Response): Promi
 }
 
 /**
- * Exporta as notas filtradas em formato CSV.
+ * Exporta as notas filtradas em PDF, CSV ou Excel.
  */
 export async function exportarNotas(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
@@ -222,75 +440,34 @@ export async function exportarNotas(request: Request, response: Response): Promi
     return;
   }
 
-  const filtros = filtrosSchema.parse(request.query);
+  const filtros = exportacaoSchema.parse(request.query);
+  const formatadas = await carregarNotasParaExportacao(userId, filtros);
+  const linhas = montarLinhasExportacao(formatadas);
+  const resumo = montarResumo(formatadas);
 
-  const notas = await prisma.notaFiscal.findMany({
-    where: {
-      userId,
-      OR: filtros.busca
-        ? [
-            { numero: { contains: filtros.busca, mode: "insensitive" } },
-            { cliente: { contains: filtros.busca, mode: "insensitive" } },
-            { destinatario: { contains: filtros.busca, mode: "insensitive" } },
-          ]
-        : undefined,
-    },
-    include: {
-      historicos: {
-        include: {
-          user: {
-            select: { id: true, nome: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 3,
-      },
-    },
-  });
-
-  let formatadas = ordenarNotas(notas.map(formatarNotaFiscal), filtros.sortBy, filtros.sortOrder);
-
-  if (filtros.periodo === "7" || filtros.periodo === "30") {
-    const hoje = normalizarData(new Date());
-    const limite = new Date(hoje);
-    limite.setDate(limite.getDate() + Number(filtros.periodo));
-    formatadas = formatadas.filter((nota) => normalizarData(new Date(nota.dataLimite)) <= limite);
+  if (filtros.formato === "excel") {
+    const excel = gerarExcelBuffer(linhas);
+    response.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    response.setHeader("Content-Disposition", "attachment; filename=notas-fiscais.xlsx");
+    response.send(excel);
+    return;
   }
 
-  if (filtros.status && filtros.status !== "todos") {
-    formatadas = formatadas.filter((nota) => nota.status === filtros.status);
+  if (filtros.formato === "csv") {
+    const csv = gerarCsv(linhas);
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", "attachment; filename=notas-fiscais.csv");
+    response.send(csv);
+    return;
   }
 
-  const csvLinhas = [
-    [
-      "Numero",
-      "Cliente",
-      "Destinatario",
-      "DataEmissao",
-      "DataChegada",
-      "DataLimite",
-      "Status",
-      "IndicadorPrazo",
-    ].join(","),
-    ...formatadas.map((nota) =>
-      [
-        nota.numero,
-        nota.cliente,
-        nota.destinatario,
-        nota.dataEmissao,
-        nota.dataChegada,
-        nota.dataLimite,
-        nota.status,
-        nota.indicadorPrazo,
-      ]
-        .map((campo) => `"${String(campo).replace(/"/g, '""')}"`)
-        .join(","),
-    ),
-  ];
-
-  response.setHeader("Content-Type", "text/csv; charset=utf-8");
-  response.setHeader("Content-Disposition", "attachment; filename=notas-fiscais.csv");
-  response.send(csvLinhas.join("\n"));
+  const pdf = await gerarPdfBuffer(linhas, resumo, filtros);
+  response.setHeader("Content-Type", "application/pdf");
+  response.setHeader("Content-Disposition", "attachment; filename=notas-fiscais.pdf");
+  response.send(pdf);
 }
 
 /**
@@ -331,21 +508,7 @@ export async function listarNotas(request: Request, response: Response): Promise
     },
   });
 
-  let notasFormatadas = notas.map(formatarNotaFiscal);
-
-  if (filtros.periodo === "7" || filtros.periodo === "30") {
-    const limite = new Date(hoje);
-    limite.setDate(limite.getDate() + Number(filtros.periodo));
-    notasFormatadas = notasFormatadas.filter(
-      (nota) => normalizarData(new Date(nota.dataLimite)) <= limite,
-    );
-  }
-
-  if (filtros.status && filtros.status !== "todos") {
-    notasFormatadas = notasFormatadas.filter((nota) => nota.status === filtros.status);
-  }
-
-  notasFormatadas = ordenarNotas(notasFormatadas, filtros.sortBy, filtros.sortOrder);
+  let notasFormatadas = aplicarFiltrosNotas(notas.map(formatarNotaFiscal), filtros);
 
   const totalItems = notasFormatadas.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / filtros.pageSize));
@@ -429,6 +592,7 @@ export async function criarNota(request: Request, response: Response): Promise<v
       numero: dados.numero.trim(),
       cliente: dados.cliente.trim(),
       destinatario: dados.destinatario.trim(),
+      observacoes: dados.observacoes?.trim() ? dados.observacoes.trim() : null,
       dataEmissao: new Date(dados.dataEmissao),
       dataChegada: new Date(dados.dataChegada),
       dataLimite: new Date(dados.dataLimite),
@@ -454,6 +618,7 @@ export async function criarNota(request: Request, response: Response): Promise<v
     alteracoes: {
       cliente: nota.cliente,
       destinatario: nota.destinatario,
+      observacoes: nota.observacoes,
       dataLimite: nota.dataLimite.toISOString(),
     },
   });
@@ -527,6 +692,13 @@ export async function atualizarNota(request: Request, response: Response): Promi
     };
   }
 
+  if ((notaExistente.observacoes ?? "") !== (dados.observacoes?.trim() ?? "")) {
+    alteracoes.observacoes = {
+      de: notaExistente.observacoes,
+      para: dados.observacoes?.trim() ?? null,
+    };
+  }
+
   if (notaExistente.dataLimite.toISOString().slice(0, 10) !== dados.dataLimite) {
     alteracoes.dataLimite = {
       de: notaExistente.dataLimite.toISOString(),
@@ -540,6 +712,7 @@ export async function atualizarNota(request: Request, response: Response): Promi
       numero: dados.numero.trim(),
       cliente: dados.cliente.trim(),
       destinatario: dados.destinatario.trim(),
+      observacoes: dados.observacoes?.trim() ? dados.observacoes.trim() : null,
       dataEmissao: new Date(dados.dataEmissao),
       dataChegada: new Date(dados.dataChegada),
       dataLimite: new Date(dados.dataLimite),
@@ -641,6 +814,7 @@ export async function excluirNota(request: Request, response: Response): Promise
     alteracoes: {
       cliente: notaExistente.cliente,
       destinatario: notaExistente.destinatario,
+      observacoes: notaExistente.observacoes,
       dataLimite: notaExistente.dataLimite.toISOString(),
     },
   });

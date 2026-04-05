@@ -117,6 +117,7 @@ export function formatarNotaFiscal(
     numero: nota.numero,
     cliente: nota.cliente,
     destinatario: nota.destinatario,
+    observacoes: nota.observacoes ?? null,
     dataEmissao: nota.dataEmissao.toISOString(),
     dataChegada: nota.dataChegada.toISOString(),
     dataLimite: nota.dataLimite.toISOString(),

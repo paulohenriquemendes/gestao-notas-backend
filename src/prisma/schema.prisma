@@ -38,6 +38,7 @@ model NotaFiscal {
   numero       String
   cliente      String
   destinatario String
+  observacoes  String?
   dataEmissao  DateTime
   dataChegada  DateTime
   dataLimite   DateTime

@@ -17,6 +17,7 @@ export interface NotaFiscalRequestBody {
   numero: string;
   cliente: string;
   destinatario: string;
+  observacoes?: string;
   dataEmissao: string;
   dataChegada: string;
   dataLimite: string;
@@ -38,6 +39,7 @@ export interface NotaFiscalResponse {
   numero: string;
   cliente: string;
   destinatario: string;
+  observacoes: string | null;
   dataEmissao: string;
   dataChegada: string;
   dataLimite: string;
