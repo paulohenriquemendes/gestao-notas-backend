@@ -195,6 +195,7 @@ function montarLinhasExportacao(notas: ReturnType<typeof formatarNotaFiscal>[]) 
   return notas.map((nota) => ({
     Numero: nota.numero,
     Cliente: nota.cliente,
+    CadastradaPor: nota.criadoPorNome,
     Destinatario: nota.destinatario,
     Observacoes: nota.observacoes ?? "",
     Emissao: nota.dataEmissao,
@@ -210,7 +211,7 @@ function montarLinhasExportacao(notas: ReturnType<typeof formatarNotaFiscal>[]) 
  */
 function gerarCsv(linhas: Record<string, string | number>[]) {
   if (linhas.length === 0) {
-    return "Numero,Cliente,Destinatario,Observacoes,Emissao,Chegada,Prazo,Status,DiasRestantes";
+    return "Numero,Cliente,CadastradaPor,Destinatario,Observacoes,Emissao,Chegada,Prazo,Status,DiasRestantes";
   }
 
   const cabecalho = Object.keys(linhas[0]).join(",");
@@ -231,6 +232,7 @@ function gerarExcelBuffer(linhas: Record<string, string | number>[]) {
   const cabecalho = [
     "Numero",
     "Cliente",
+    "CadastradaPor",
     "Destinatario",
     "Observacoes",
     "Emissao",
@@ -242,6 +244,7 @@ function gerarExcelBuffer(linhas: Record<string, string | number>[]) {
   const dados = linhas.map((linha) => [
     linha.Numero,
     linha.Cliente,
+    linha.CadastradaPor,
     linha.Destinatario,
     linha.Observacoes,
     linha.Emissao,
@@ -325,13 +328,16 @@ function gerarPdfBuffer(
       }
 
       const topo = pdf.y;
-      const altura = 92;
+      const altura = 108;
       pdf.roundedRect(40, topo, larguraUtil, altura, 12).fill("#ffffff");
       pdf.roundedRect(40, topo, 14, altura, 12).fill(obterCorStatus(String(linha.Status)));
 
       pdf.fillColor("#0f172a").fontSize(11).text(`${index + 1}. Nota ${linha.Numero}`, 66, topo + 10);
       pdf.fontSize(10).fillColor("#1e293b").text(String(linha.Cliente), 66, topo + 26, { width: 240 });
-      pdf.fontSize(9).fillColor("#475569").text(`Destinatario: ${linha.Destinatario}`, 66, topo + 48, {
+      pdf.fontSize(9).fillColor("#475569").text(`Cadastrada por: ${linha.CadastradaPor}`, 66, topo + 44, {
+        width: 250,
+      });
+      pdf.text(`Destinatario: ${linha.Destinatario}`, 66, topo + 62, {
         width: 250,
       });
       pdf.text(`Prazo: ${linha.Prazo} | Status: ${linha.Status}`, 320, topo + 10, { width: 220 });
@@ -365,6 +371,9 @@ async function carregarNotasParaExportacao(
         : undefined,
     },
     include: {
+      user: {
+        select: { id: true, nome: true },
+      },
       historicos: {
         include: {
           user: {
@@ -430,6 +439,9 @@ export async function listarAlertas(request: Request, response: Response): Promi
   const notas = await prisma.notaFiscal.findMany({
     where: obterEscopoNotas(userId, userRole),
     include: {
+      user: {
+        select: { id: true, nome: true },
+      },
       historicos: {
         include: {
           user: {
@@ -514,6 +526,9 @@ export async function listarNotas(request: Request, response: Response): Promise
         : undefined,
     },
     include: {
+      user: {
+        select: { id: true, nome: true },
+      },
       historicos: {
         include: {
           user: {
@@ -570,6 +585,9 @@ export async function obterNota(request: Request, response: Response): Promise<v
   const nota = await prisma.notaFiscal.findFirst({
     where: { id, ...obterEscopoNotas(userId ?? "", userRole) },
     include: {
+      user: {
+        select: { id: true, nome: true },
+      },
       historicos: {
         include: {
           user: {
@@ -618,6 +636,9 @@ export async function criarNota(request: Request, response: Response): Promise<v
       userId,
     },
     include: {
+      user: {
+        select: { id: true, nome: true },
+      },
       historicos: {
         include: {
           user: {
@@ -646,6 +667,9 @@ export async function criarNota(request: Request, response: Response): Promise<v
   const notaAtualizada = await prisma.notaFiscal.findUniqueOrThrow({
     where: { id: nota.id },
     include: {
+      user: {
+        select: { id: true, nome: true },
+      },
       historicos: {
         include: {
           user: {
@@ -784,6 +808,9 @@ export async function atualizarNota(request: Request, response: Response): Promi
   const notaAtualizada = await prisma.notaFiscal.findUniqueOrThrow({
     where: { id: nota.id },
     include: {
+      user: {
+        select: { id: true, nome: true },
+      },
       historicos: {
         include: {
           user: {

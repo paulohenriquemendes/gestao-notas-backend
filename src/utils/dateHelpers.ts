@@ -104,6 +104,7 @@ export function formatarHistorico(
  */
 export function formatarNotaFiscal(
   nota: NotaFiscal & {
+    user: Pick<User, "id" | "nome">;
     historicos?: (NotaHistorico & { user: Pick<User, "id" | "nome"> })[];
   },
 ): NotaFiscalResponse {
@@ -118,6 +119,7 @@ export function formatarNotaFiscal(
     cliente: nota.cliente,
     destinatario: nota.destinatario,
     observacoes: nota.observacoes ?? null,
+    criadoPorNome: nota.user.nome,
     dataEmissao: nota.dataEmissao.toISOString(),
     dataChegada: nota.dataChegada.toISOString(),
     dataLimite: nota.dataLimite.toISOString(),

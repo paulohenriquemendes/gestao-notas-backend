@@ -40,6 +40,7 @@ export interface NotaFiscalResponse {
   cliente: string;
   destinatario: string;
   observacoes: string | null;
+  criadoPorNome: string;
   dataEmissao: string;
   dataChegada: string;
   dataLimite: string;
