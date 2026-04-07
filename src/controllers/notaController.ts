@@ -16,7 +16,7 @@ import { logger } from "../utils/logger";
 const notaSchema = z
   .object({
     numero: z.string().min(1, "Informe o número da nota fiscal."),
-    cliente: z.string().min(2, "Informe o cliente."),
+    cliente: z.string().min(2, "Informe a cidade."),
     destinatario: z.string().min(2, "Informe o destinatário final."),
     observacoes: z.string().max(2000, "As observações devem ter no máximo 2000 caracteres.").optional(),
     dataEmissao: z.string().min(1, "Informe a data de emissão."),
@@ -194,7 +194,7 @@ function aplicarFiltrosNotas(
 function montarLinhasExportacao(notas: ReturnType<typeof formatarNotaFiscal>[]) {
   return notas.map((nota) => ({
     Numero: nota.numero,
-    Cliente: nota.cliente,
+    Cidade: nota.cliente,
     CadastradaPor: nota.criadoPorNome,
     Destinatario: nota.destinatario,
     Observacoes: nota.observacoes ?? "",
@@ -211,7 +211,7 @@ function montarLinhasExportacao(notas: ReturnType<typeof formatarNotaFiscal>[]) 
  */
 function gerarCsv(linhas: Record<string, string | number>[]) {
   if (linhas.length === 0) {
-    return "Numero,Cliente,CadastradaPor,Destinatario,Observacoes,Emissao,Chegada,Prazo,Status,DiasRestantes";
+    return "Numero,Cidade,CadastradaPor,Destinatario,Observacoes,Emissao,Chegada,Prazo,Status,DiasRestantes";
   }
 
   const cabecalho = Object.keys(linhas[0]).join(",");
@@ -231,7 +231,7 @@ function gerarExcelBuffer(linhas: Record<string, string | number>[]) {
   const workbook = XLSX.utils.book_new();
   const cabecalho = [
     "Numero",
-    "Cliente",
+    "Cidade",
     "CadastradaPor",
     "Destinatario",
     "Observacoes",
@@ -243,7 +243,7 @@ function gerarExcelBuffer(linhas: Record<string, string | number>[]) {
   ];
   const dados = linhas.map((linha) => [
     linha.Numero,
-    linha.Cliente,
+    linha.Cidade,
     linha.CadastradaPor,
     linha.Destinatario,
     linha.Observacoes,
@@ -333,7 +333,7 @@ function gerarPdfBuffer(
       pdf.roundedRect(40, topo, 14, altura, 12).fill(obterCorStatus(String(linha.Status)));
 
       pdf.fillColor("#0f172a").fontSize(11).text(`${index + 1}. Nota ${linha.Numero}`, 66, topo + 10);
-      pdf.fontSize(10).fillColor("#1e293b").text(String(linha.Cliente), 66, topo + 26, { width: 240 });
+      pdf.fontSize(10).fillColor("#1e293b").text(String(linha.Cidade), 66, topo + 26, { width: 240 });
       pdf.fontSize(9).fillColor("#475569").text(`Cadastrada por: ${linha.CadastradaPor}`, 66, topo + 44, {
         width: 250,
       });
