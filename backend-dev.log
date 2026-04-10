@@ -1,0 +1,6 @@
+
+> gestao-notas-backend@1.0.0 dev
+> tsx watch src/server.ts
+
+{"level":"info","mensagem":"Servidor backend rodando","contexto":{"port":3333},"timestamp":"2026-04-07T11:55:10.120Z"}
+prisma:error Error in PostgreSQL connection: Error { kind: Closed, cause: None }

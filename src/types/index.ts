@@ -44,6 +44,8 @@ export interface NotaFiscalResponse {
   dataEmissao: string;
   dataChegada: string;
   dataLimite: string;
+  entregueEm: string | null;
+  arquivada: boolean;
   userId: string;
   diasDesdeChegada: number;
   diasRestantes: number;

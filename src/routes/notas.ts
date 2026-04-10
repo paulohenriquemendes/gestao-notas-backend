@@ -6,6 +6,7 @@ import {
   exportarNotas,
   listarAlertas,
   listarNotas,
+  marcarNotaComoEntregue,
   obterNota,
   obterSugestoes,
 } from "../controllers/notaController";
@@ -19,6 +20,7 @@ notasRouter.get("/", asyncHandler(listarNotas));
 notasRouter.get("/alertas", asyncHandler(listarAlertas));
 notasRouter.get("/sugestoes", asyncHandler(obterSugestoes));
 notasRouter.get("/exportar", asyncHandler(exportarNotas));
+notasRouter.post("/:id/entregar", asyncHandler(marcarNotaComoEntregue));
 notasRouter.get("/:id", asyncHandler(obterNota));
 notasRouter.post("/", asyncHandler(criarNota));
 notasRouter.put("/:id", asyncHandler(atualizarNota));

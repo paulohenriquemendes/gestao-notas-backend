@@ -18,6 +18,7 @@ enum HistoricoAcao {
   EXCLUIDA
   PRAZO_ALTERADO
   DESTINATARIO_ALTERADO
+  ENTREGUE
 }
 
 model User {
@@ -42,6 +43,7 @@ model NotaFiscal {
   dataEmissao  DateTime
   dataChegada  DateTime
   dataLimite   DateTime
+  entregueEm   DateTime?
   userId       String
   user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   historicos   NotaHistorico[]

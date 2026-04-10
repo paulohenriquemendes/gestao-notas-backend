@@ -48,6 +48,7 @@ const notaSchema = z
 const filtrosSchema = z.object({
   status: z.string().optional(),
   periodo: z.string().optional(),
+  visao: z.enum(["ativas", "arquivadas"]).default("ativas"),
   busca: z.string().optional(),
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(50).default(10),
@@ -68,6 +69,13 @@ function obterEscopoNotas(userId: string, userRole?: string) {
   }
 
   return { userId };
+}
+
+/**
+ * Define se a busca deve considerar notas ativas ou arquivadas.
+ */
+function obterFiltroArquivamento(visao: "ativas" | "arquivadas") {
+  return visao === "arquivadas" ? { NOT: { entregueEm: null } } : { entregueEm: null };
 }
 
 /**
@@ -362,6 +370,7 @@ async function carregarNotasParaExportacao(
   const notas = await prisma.notaFiscal.findMany({
     where: {
       ...obterEscopoNotas(userId, userRole),
+      ...obterFiltroArquivamento(filtros.visao),
       OR: filtros.busca
         ? [
             { numero: { contains: filtros.busca, mode: "insensitive" } },
@@ -517,6 +526,7 @@ export async function listarNotas(request: Request, response: Response): Promise
   const notas = await prisma.notaFiscal.findMany({
     where: {
       ...obterEscopoNotas(userId, userRole),
+      ...obterFiltroArquivamento(filtros.visao),
       OR: filtros.busca
         ? [
             { numero: { contains: filtros.busca, mode: "insensitive" } },
@@ -563,6 +573,7 @@ export async function listarNotas(request: Request, response: Response): Promise
       busca: filtros.busca ?? "",
       periodo: filtros.periodo ?? "todos",
       status: filtros.status ?? "todos",
+      visao: filtros.visao,
       sortBy: filtros.sortBy,
       sortOrder: filtros.sortOrder,
     },
@@ -872,4 +883,85 @@ export async function excluirNota(request: Request, response: Response): Promise
   });
 
   response.status(204).send();
+}
+
+/**
+ * Marca uma nota fiscal como entregue e a move para a lista de arquivadas.
+ */
+export async function marcarNotaComoEntregue(request: Request, response: Response): Promise<void> {
+  const userId = request.userId;
+  const userRole = request.userRole;
+  const id = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+
+  if (!userId) {
+    response.status(401).json({ message: "UsuÃ¡rio nÃ£o autenticado." });
+    return;
+  }
+
+  if (!id) {
+    response.status(400).json({ message: "Identificador da nota fiscal nÃ£o informado." });
+    return;
+  }
+
+  const notaExistente = await prisma.notaFiscal.findFirst({
+    where: { id, ...obterEscopoNotas(userId, userRole) },
+    include: {
+      user: {
+        select: { id: true, nome: true },
+      },
+      historicos: {
+        include: {
+          user: {
+            select: { id: true, nome: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
+    },
+  });
+
+  if (!notaExistente) {
+    response.status(404).json({ message: "Nota fiscal nÃ£o encontrada." });
+    return;
+  }
+
+  if (notaExistente.entregueEm) {
+    response.status(400).json({ message: "Essa nota jÃ¡ foi marcada como entregue." });
+    return;
+  }
+
+  const notaAtualizada = await prisma.notaFiscal.update({
+    where: { id },
+    data: {
+      entregueEm: new Date(),
+    },
+    include: {
+      user: {
+        select: { id: true, nome: true },
+      },
+      historicos: {
+        include: {
+          user: {
+            select: { id: true, nome: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
+    },
+  });
+
+  await registrarHistorico({
+    notaId: notaAtualizada.id,
+    numeroNota: notaAtualizada.numero,
+    userId,
+    acao: "ENTREGUE",
+    descricao: "Nota fiscal marcada como entregue e arquivada.",
+    alteracoes: {
+      entregueEm: notaAtualizada.entregueEm?.toISOString() ?? null,
+    },
+  });
+
+  response.json(formatarNotaFiscal(notaAtualizada));
 }

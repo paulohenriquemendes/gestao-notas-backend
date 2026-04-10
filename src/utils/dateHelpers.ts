@@ -123,6 +123,8 @@ export function formatarNotaFiscal(
     dataEmissao: nota.dataEmissao.toISOString(),
     dataChegada: nota.dataChegada.toISOString(),
     dataLimite: nota.dataLimite.toISOString(),
+    entregueEm: nota.entregueEm?.toISOString() ?? null,
+    arquivada: Boolean(nota.entregueEm),
     userId: nota.userId,
     diasDesdeChegada,
     diasRestantes,
