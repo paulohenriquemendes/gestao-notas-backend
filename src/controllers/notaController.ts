@@ -13,6 +13,28 @@ import {
 import { DashboardAlerta, DashboardResumo } from "../types";
 import { logger } from "../utils/logger";
 
+/**
+ * Normaliza valores vindos da query string para evitar que campos vazios,
+ * arrays ou a string literal "undefined" quebrem a validacao.
+ */
+function normalizarValorQuery(valor: unknown) {
+  if (Array.isArray(valor)) {
+    return valor[0];
+  }
+
+  if (typeof valor === "string") {
+    const valorLimpo = valor.trim();
+
+    if (!valorLimpo || valorLimpo.toLowerCase() === "undefined" || valorLimpo.toLowerCase() === "null") {
+      return undefined;
+    }
+
+    return valorLimpo;
+  }
+
+  return valor;
+}
+
 const notaSchema = z
   .object({
     numero: z.string().min(1, "Informe o número da nota fiscal."),
@@ -46,14 +68,17 @@ const notaSchema = z
   });
 
 const filtrosSchema = z.object({
-  status: z.string().optional(),
-  periodo: z.string().optional(),
-  visao: z.enum(["ativas", "arquivadas"]).default("ativas"),
+  status: z.preprocess(normalizarValorQuery, z.string().optional()),
+  periodo: z.preprocess(normalizarValorQuery, z.string().optional()),
+  visao: z.preprocess(normalizarValorQuery, z.enum(["ativas", "arquivadas"]).default("ativas")),
   busca: z.string().optional(),
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(50).default(10),
-  sortBy: z.enum(["urgencia", "prazo", "cliente", "chegada"]).default("urgencia"),
-  sortOrder: z.enum(["asc", "desc"]).default("asc"),
+  sortBy: z.preprocess(
+    normalizarValorQuery,
+    z.enum(["urgencia", "prazo", "cliente", "chegada"]).default("urgencia"),
+  ),
+  sortOrder: z.preprocess(normalizarValorQuery, z.enum(["asc", "desc"]).default("asc")),
 });
 
 const exportacaoSchema = filtrosSchema.extend({
