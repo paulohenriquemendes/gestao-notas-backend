@@ -73,7 +73,7 @@ const filtrosSchema = z.object({
   visao: z.preprocess(normalizarValorQuery, z.enum(["ativas", "arquivadas"]).default("ativas")),
   busca: z.string().optional(),
   page: z.coerce.number().min(1).default(1),
-  pageSize: z.coerce.number().min(1).max(50).default(10),
+  pageSize: z.coerce.number().min(1).max(1000).default(1000),
   sortBy: z.preprocess(
     normalizarValorQuery,
     z.enum(["urgencia", "prazo", "cliente", "chegada"]).default("urgencia"),
