@@ -49,7 +49,7 @@ function gerarToken(userId: string, email: string, role: UserRole): string {
 
   return jwt.sign({ email, role }, secret, {
     subject: userId,
-    expiresIn: "7d",
+    expiresIn: "365d",
   });
 }
 
