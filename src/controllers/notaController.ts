@@ -608,6 +608,29 @@ export async function listarNotas(request: Request, response: Response): Promise
 /**
  * Busca uma nota fiscal específica pertencente ao usuário autenticado com histórico completo.
  */
+/**
+ * Lista notas ativas para exibicao publica em TV, sem exigir autenticacao.
+ */
+export async function listarNotasTvPublicas(_request: Request, response: Response): Promise<void> {
+  const notas = await prisma.notaFiscal.findMany({
+    where: {
+      entregueEm: null,
+    },
+    include: {
+      user: {
+        select: { id: true, nome: true },
+      },
+    },
+  });
+
+  const notasFormatadas = ordenarNotas(notas.map(formatarNotaFiscal), "urgencia", "asc").slice(0, 1000);
+
+  response.json({
+    notas: notasFormatadas,
+    atualizadoEm: new Date().toISOString(),
+  });
+}
+
 export async function obterNota(request: Request, response: Response): Promise<void> {
   const userId = request.userId;
   const userRole = request.userRole;

@@ -6,6 +6,7 @@ import {
   exportarNotas,
   listarAlertas,
   listarNotas,
+  listarNotasTvPublicas,
   marcarNotaComoEntregue,
   obterNota,
   obterSugestoes,
@@ -15,6 +16,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 
 const notasRouter = Router();
 
+notasRouter.get("/tv-publica", asyncHandler(listarNotasTvPublicas));
 notasRouter.use(authMiddleware);
 notasRouter.get("/", asyncHandler(listarNotas));
 notasRouter.get("/alertas", asyncHandler(listarAlertas));
